@@ -1,0 +1,487 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-master-svc
+  labels:
+    app: elasticsearch
+spec:
+  selector:
+    app: elasticsearch
+    role: master
+  ports:
+  - name: transport
+    protocol: TCP
+    port: 9300
+  clusterIP: None
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: es-master-cfg
+data:
+  elasticsearch.yml: |
+    cluster.name: elastic
+    node.name: ${POD_NAME}
+    node.master: true
+    network.host: ${POD_IP}
+    node.data: false 
+    node.ingest: false
+    discovery.zen.ping.unicast.hosts: ${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local 
+    bootstrap.memory_lock: false
+    discovery.zen.minimum_master_nodes: 2 
+    transport.tcp.port: 9300
+    transport.tcp.connect_timeout: 60s
+    transport.tcp.compress: true
+    transport.ping_schedule: 10s
+    path.data: "/usr/share/elasticsearch/data"
+    path.logs: "/usr/share/elasticsearch/logs"
+    xpack.security.enabled: false
+  jvm.options: |
+    -Xms256m
+    -Xmx256m
+
+    ## Expert settings
+    ## GC configuration
+    -XX:+UseConcMarkSweepGC
+    -XX:CMSInitiatingOccupancyFraction=75
+    -XX:+UseCMSInitiatingOccupancyOnly
+    
+    ## optimizations
+    
+    # pre-touch memory pages used by the JVM during initialization
+    -XX:+AlwaysPreTouch
+    
+    ## basic
+    
+    # force the server VM (remove on 32-bit client JVMs)
+    -server
+    
+    # explicitly set the stack size (reduce to 320k on 32-bit client JVMs)
+    -Xss1m
+    
+    # set to headless, just in case
+    -Djava.awt.headless=true
+    
+    # ensure UTF-8 encoding by default (e.g. filenames)
+    -Dfile.encoding=UTF-8
+    
+    # use our provided JNA always versus the system one
+    -Djna.nosys=true
+    
+    # use old-style file permissions on JDK9
+    -Djdk.io.permissionsUseCanonicalPath=true
+    
+    # flags to configure Netty
+    -Dio.netty.noUnsafe=true
+    -Dio.netty.noKeySetOptimization=true
+    -Dio.netty.recycler.maxCapacityPerThread=0
+    
+    # log4j 2
+    -Dlog4j.shutdownHookEnabled=false
+    -Dlog4j2.disable.jmx=true
+    -Dlog4j.skipJansi=true
+    
+    ## heap dumps
+    
+    # generate a heap dump when an allocation from the Java heap fails
+    # heap dumps are created in the working directory of the JVM
+    -XX:+HeapDumpOnOutOfMemoryError
+    
+  log4j2.properties: |
+    status = error
+
+    # log action execution errors for easier debugging
+    logger.action.name = org.elasticsearch.action
+    logger.action.level = debug
+    
+    appender.console.type = Console
+    appender.console.name = console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+    
+    appender.rolling.type = RollingFile
+    appender.rolling.name = rolling
+    appender.rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}.log
+    appender.rolling.layout.type = PatternLayout
+    appender.rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%.-10000m%n
+    appender.rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}-%d{yyyy-MM-dd}.log
+    appender.rolling.policies.type = Policies
+    appender.rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.rolling.policies.time.interval = 1
+    appender.rolling.policies.time.modulate = true
+    
+    rootLogger.level = info
+    rootLogger.appenderRef.console.ref = console
+    rootLogger.appenderRef.rolling.ref = rolling
+    
+    appender.deprecation_rolling.type = RollingFile
+    appender.deprecation_rolling.name = deprecation_rolling
+    appender.deprecation_rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_deprecation.log
+    appender.deprecation_rolling.layout.type = PatternLayout
+    appender.deprecation_rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%.-10000m%n
+    appender.deprecation_rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_deprecation-%i.log.gz
+    appender.deprecation_rolling.policies.type = Policies
+    appender.deprecation_rolling.policies.size.type = SizeBasedTriggeringPolicy
+    appender.deprecation_rolling.policies.size.size = 1GB
+    appender.deprecation_rolling.strategy.type = DefaultRolloverStrategy
+    appender.deprecation_rolling.strategy.max = 4
+    
+    logger.deprecation.name = org.elasticsearch.deprecation
+    logger.deprecation.level = warn
+    logger.deprecation.appenderRef.deprecation_rolling.ref = deprecation_rolling
+    logger.deprecation.additivity = false
+    
+    appender.index_search_slowlog_rolling.type = RollingFile
+    appender.index_search_slowlog_rolling.name = index_search_slowlog_rolling
+    appender.index_search_slowlog_rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_search_slowlog.log
+    appender.index_search_slowlog_rolling.layout.type = PatternLayout
+    appender.index_search_slowlog_rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c] %marker%.-10000m%n
+    appender.index_search_slowlog_rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_search_slowlog-%d{yyyy-MM-dd}.log
+    appender.index_search_slowlog_rolling.policies.type = Policies
+    appender.index_search_slowlog_rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.index_search_slowlog_rolling.policies.time.interval = 1
+    appender.index_search_slowlog_rolling.policies.time.modulate = true
+    
+    logger.index_search_slowlog_rolling.name = index.search.slowlog
+    logger.index_search_slowlog_rolling.level = trace
+    logger.index_search_slowlog_rolling.appenderRef.index_search_slowlog_rolling.ref = index_search_slowlog_rolling
+    logger.index_search_slowlog_rolling.additivity = false
+    
+    appender.index_indexing_slowlog_rolling.type = RollingFile
+    appender.index_indexing_slowlog_rolling.name = index_indexing_slowlog_rolling
+    appender.index_indexing_slowlog_rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_indexing_slowlog.log
+    appender.index_indexing_slowlog_rolling.layout.type = PatternLayout
+    appender.index_indexing_slowlog_rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c] %marker%.-10000m%n
+    appender.index_indexing_slowlog_rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_indexing_slowlog-%d{yyyy-MM-dd}.log
+    appender.index_indexing_slowlog_rolling.policies.type = Policies
+    appender.index_indexing_slowlog_rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.index_indexing_slowlog_rolling.policies.time.interval = 1
+    appender.index_indexing_slowlog_rolling.policies.time.modulate = true
+    
+    logger.index_indexing_slowlog.name = index.indexing.slowlog.index
+    logger.index_indexing_slowlog.level = trace
+    logger.index_indexing_slowlog.appenderRef.index_indexing_slowlog_rolling.ref = index_indexing_slowlog_rolling
+    logger.index_indexing_slowlog.additivity = false
+---
+apiVersion: apps/v1beta2
+kind: StatefulSet
+metadata: 
+  name: es-master
+  labels:
+    app: elasticsearch
+    role: master
+spec:
+  replicas: 3
+  serviceName: es-master-svc         
+  selector:
+    matchLabels:
+      app: elasticsearch
+      role: master
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+        role: master
+    spec:
+      initContainers:
+      - name: fix-it
+        image: busybox
+        command: ["/bin/sh"]
+        args: ["-c","sysctl -w vm.max_map_count=262144"]
+        securityContext: 
+          privileged: true
+
+      containers:
+      - name: elastic
+        image: docker.elastic.co/elasticsearch/elasticsearch:5.6.4
+        securityContext:
+          capabilities:
+            add:
+             - SYS_RESOURCE       
+             - IPC_LOCK
+        resources:        
+          limits:
+            memory: "512Mi"
+          requests:
+            memory: "512Mi"
+        ports:
+        - containerPort: 9300
+          name: transport
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NAMESPACE
+          valueFrom: 
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SERVICE_NAME
+          value: es-master-svc
+        volumeMounts:
+          - name: es-data
+            mountPath: /usr/share/elasticsearch/data
+          - name: es-config-vol
+            mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+            subPath: elasticsearch.yml
+          - name: es-config-vol
+            mountPath: /usr/share/elasticsearch/config/jvm.options
+            subPath: jvm.options
+          - name: es-config-vol
+            mountPath: /usr/share/elasticsearch/config/log4j2.properties
+            subPath: log4j2.properties
+      volumes:
+      - name: es-config-vol
+        configMap:
+          name: es-master-cfg
+      - name: es-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: 
+  name: es-data-svc
+  labels: 
+    app: elasticsearch
+spec:
+  selector:
+    app: elasticsearch
+    role: data
+  ports:
+  - name: es-http
+    protocol: TCP
+    port: 9200
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: es-data-cfg
+data:
+  elasticsearch.yml: |
+    cluster.name: elastic
+    node.name: ${POD_NAME}
+    node.master: false
+    network.host: ${POD_IP}
+    node.data: true 
+    node.ingest: true
+    discovery.zen.ping.unicast.hosts: ${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local 
+    bootstrap.memory_lock: false
+    discovery.zen.minimum_master_nodes: 2 
+    transport.tcp.port: 9300
+    transport.tcp.connect_timeout: 60s
+    transport.tcp.compress: true
+    transport.ping_schedule: 10s
+    path.data: "/usr/share/elasticsearch/data"
+    path.logs: "/usr/share/elasticsearch/logs"
+    xpack.security.enabled: false
+  jvm.options: |
+    -Xms256m
+    -Xmx256m
+
+    ## Expert settings
+    ## GC configuration
+    -XX:+UseConcMarkSweepGC
+    -XX:CMSInitiatingOccupancyFraction=75
+    -XX:+UseCMSInitiatingOccupancyOnly
+    
+    ## optimizations
+    
+    # pre-touch memory pages used by the JVM during initialization
+    -XX:+AlwaysPreTouch
+    
+    ## basic
+    
+    # force the server VM (remove on 32-bit client JVMs)
+    -server
+    
+    # explicitly set the stack size (reduce to 320k on 32-bit client JVMs)
+    -Xss1m
+    
+    # set to headless, just in case
+    -Djava.awt.headless=true
+    
+    # ensure UTF-8 encoding by default (e.g. filenames)
+    -Dfile.encoding=UTF-8
+    
+    # use our provided JNA always versus the system one
+    -Djna.nosys=true
+    
+    # use old-style file permissions on JDK9
+    -Djdk.io.permissionsUseCanonicalPath=true
+    
+    # flags to configure Netty
+    -Dio.netty.noUnsafe=true
+    -Dio.netty.noKeySetOptimization=true
+    -Dio.netty.recycler.maxCapacityPerThread=0
+    
+    # log4j 2
+    -Dlog4j.shutdownHookEnabled=false
+    -Dlog4j2.disable.jmx=true
+    -Dlog4j.skipJansi=true
+    
+    ## heap dumps
+    
+    # generate a heap dump when an allocation from the Java heap fails
+    # heap dumps are created in the working directory of the JVM
+    -XX:+HeapDumpOnOutOfMemoryError
+    
+  log4j2.properties: |
+    status = error
+
+    # log action execution errors for easier debugging
+    logger.action.name = org.elasticsearch.action
+    logger.action.level = debug
+    
+    appender.console.type = Console
+    appender.console.name = console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+    
+    appender.rolling.type = RollingFile
+    appender.rolling.name = rolling
+    appender.rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}.log
+    appender.rolling.layout.type = PatternLayout
+    appender.rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%.-10000m%n
+    appender.rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}-%d{yyyy-MM-dd}.log
+    appender.rolling.policies.type = Policies
+    appender.rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.rolling.policies.time.interval = 1
+    appender.rolling.policies.time.modulate = true
+    
+    rootLogger.level = info
+    rootLogger.appenderRef.console.ref = console
+    rootLogger.appenderRef.rolling.ref = rolling
+    
+    appender.deprecation_rolling.type = RollingFile
+    appender.deprecation_rolling.name = deprecation_rolling
+    appender.deprecation_rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_deprecation.log
+    appender.deprecation_rolling.layout.type = PatternLayout
+    appender.deprecation_rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%.-10000m%n
+    appender.deprecation_rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_deprecation-%i.log.gz
+    appender.deprecation_rolling.policies.type = Policies
+    appender.deprecation_rolling.policies.size.type = SizeBasedTriggeringPolicy
+    appender.deprecation_rolling.policies.size.size = 1GB
+    appender.deprecation_rolling.strategy.type = DefaultRolloverStrategy
+    appender.deprecation_rolling.strategy.max = 4
+    
+    logger.deprecation.name = org.elasticsearch.deprecation
+    logger.deprecation.level = warn
+    logger.deprecation.appenderRef.deprecation_rolling.ref = deprecation_rolling
+    logger.deprecation.additivity = false
+    
+    appender.index_search_slowlog_rolling.type = RollingFile
+    appender.index_search_slowlog_rolling.name = index_search_slowlog_rolling
+    appender.index_search_slowlog_rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_search_slowlog.log
+    appender.index_search_slowlog_rolling.layout.type = PatternLayout
+    appender.index_search_slowlog_rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c] %marker%.-10000m%n
+    appender.index_search_slowlog_rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_search_slowlog-%d{yyyy-MM-dd}.log
+    appender.index_search_slowlog_rolling.policies.type = Policies
+    appender.index_search_slowlog_rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.index_search_slowlog_rolling.policies.time.interval = 1
+    appender.index_search_slowlog_rolling.policies.time.modulate = true
+    
+    logger.index_search_slowlog_rolling.name = index.search.slowlog
+    logger.index_search_slowlog_rolling.level = trace
+    logger.index_search_slowlog_rolling.appenderRef.index_search_slowlog_rolling.ref = index_search_slowlog_rolling
+    logger.index_search_slowlog_rolling.additivity = false
+    
+    appender.index_indexing_slowlog_rolling.type = RollingFile
+    appender.index_indexing_slowlog_rolling.name = index_indexing_slowlog_rolling
+    appender.index_indexing_slowlog_rolling.fileName = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_indexing_slowlog.log
+    appender.index_indexing_slowlog_rolling.layout.type = PatternLayout
+    appender.index_indexing_slowlog_rolling.layout.pattern = [%d{ISO8601}][%-5p][%-25c] %marker%.-10000m%n
+    appender.index_indexing_slowlog_rolling.filePattern = ${sys:es.logs.base_path}${sys:file.separator}${sys:es.logs.cluster_name}_index_indexing_slowlog-%d{yyyy-MM-dd}.log
+    appender.index_indexing_slowlog_rolling.policies.type = Policies
+    appender.index_indexing_slowlog_rolling.policies.time.type = TimeBasedTriggeringPolicy
+    appender.index_indexing_slowlog_rolling.policies.time.interval = 1
+    appender.index_indexing_slowlog_rolling.policies.time.modulate = true
+    
+    logger.index_indexing_slowlog.name = index.indexing.slowlog.index
+    logger.index_indexing_slowlog.level = trace
+    logger.index_indexing_slowlog.appenderRef.index_indexing_slowlog_rolling.ref = index_indexing_slowlog_rolling
+    logger.index_indexing_slowlog.additivity = false
+
+---
+apiVersion: apps/v1beta2
+kind: StatefulSet
+metadata: 
+  name: es-data
+  labels:
+    app: elasticsearch
+    role: data
+spec:
+  replicas: 4
+  serviceName: es-data-svc         
+  selector:
+    matchLabels:
+      app: elasticsearch
+      role: data
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+        role: data
+    spec:
+      initContainers:
+      - name: fix-it
+        image: busybox
+        command: ["/bin/sh"]
+        args: ["-c","sysctl -w vm.max_map_count=262144"]
+        securityContext: 
+          privileged: true
+      containers:
+      - name: elastic
+        image: docker.elastic.co/elasticsearch/elasticsearch:5.6.4
+        securityContext:
+          capabilities:
+            add:
+             - SYS_RESOURCE       
+             - IPC_LOCK
+        resources:        
+          limits:
+            memory: "512Mi"
+          requests:
+            memory: "512Mi"
+        ports:
+        - containerPort: 9200
+          name: transport
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SERVICE_NAME
+          value: es-master-svc
+        volumeMounts:
+          - name: es-data
+            mountPath: /usr/share/elasticsearch/data
+          - name: es-config-vol
+            mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+            subPath: elasticsearch.yml
+          - name: es-config-vol
+            mountPath: /usr/share/elasticsearch/config/jvm.options
+            subPath: jvm.options
+          - name: es-config-vol
+            mountPath: /usr/share/elasticsearch/config/log4j2.properties
+            subPath: log4j2.properties
+      volumes:
+      - name: es-config-vol
+        configMap:
+          name: es-data-cfg
+      - name: es-data
+        emptyDir: {}
