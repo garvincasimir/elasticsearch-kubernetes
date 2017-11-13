@@ -5,6 +5,8 @@ To deploy:
 ```
 kubectl apply -f https://raw.githubusercontent.com/garvincasimir/elasticsearch-kubernetes/master/es-cluster.yaml
 ```
+![Cluster Output](cluster.png)
+
  ### Controllers
 This setup features a pair of StatefulSets, one for the master nodes and one for the data nodes. 
 
