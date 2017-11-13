@@ -23,8 +23,8 @@ Both node types use the DNS name of the headless master service for discovery. T
 ### Configuring Elasticsearch
 The Elasticsearch config values are managed in ConfigMaps. These map to the node types and are mounted into the elasticsearch config folder on a per-file basis. This is so config files that come with the image will not be unintentionally overwritten. Please view the [official Elastic.io docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/settings.html) for more details on configuring Elasticsearch.
 
-### Pods
-Each pod includes an init container and a container running the [official elasticsearch image](https://www.docker.elastic.co). The init container is used to set *vm.max_map_count*. Please see the[docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html#docker-cli-run-prod-mode) for further details on this and other production settings. I recommend pre-configuing your nodes and ommitting this init container. 
+### Pods 
+Each pod includes an init container and a container running the [official elasticsearch image](https://www.docker.elastic.co). The init container is used to set *vm.max_map_count*. Please see the [docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html#docker-cli-run-prod-mode) for further details on this and other production settings. I recommend pre-configuing your nodes and ommitting this init container. 
 
 ### Resource Limits
 Use data.jvm.options to adjust the JVM heap size. This must be done serpareately for each node type.
@@ -47,6 +47,6 @@ If you need to scale compute and storage separately consider adding a Deployment
 
 ### Other considerations
 There are many other features this cluster can benefit from such as:
-  * Automated Snapshots using timed tasks
+  * Automated snapshots using tasks
   *  Pod disruption budgets
-  *  Pod Affinity
+  *  Pod affinity
