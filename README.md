@@ -15,7 +15,7 @@ kubectl get pods,cm,svc -l app=elasticsearch
 This setup features a pair of StatefulSets, one for the master nodes and one for the data nodes. 
 
 ### Volumes
-The data mounts are backed by emptyDir volumes but can easily be swapped out with something more durable.
+The data mounts are backed by *emptyDir* volumes but can easily be swapped out with something more durable.
 
 ### Services
 Both node types use the DNS name of the headless master service for discovery. The data service is used to interact with the cluster http endpoints.
