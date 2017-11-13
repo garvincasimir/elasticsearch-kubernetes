@@ -5,6 +5,10 @@ To deploy:
 ```
 kubectl apply -f https://raw.githubusercontent.com/garvincasimir/elasticsearch-kubernetes/master/es-cluster.yaml
 ```
+
+```
+kubectl get pods,cm,svc -l app=elasticsearch
+```
 ![Cluster Output](cluster.png)
 
  ### Controllers
